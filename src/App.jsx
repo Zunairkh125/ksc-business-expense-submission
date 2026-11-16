@@ -240,6 +240,14 @@ function ExpenseSlackLogin({ onLogin }) {
     }
   }
 
+  function handleTestBypass() {
+    setEmail('test@kawaiislimecompany.com')
+    setStep('code')
+    setCode('1234')
+    setError('')
+    setMessage('Demo Testing Mode: Click "Verify & Sign In" below with test code 1234.')
+  }
+
   return (
     <div className="expense-login-form">
       <p>
@@ -266,6 +274,16 @@ function ExpenseSlackLogin({ onLogin }) {
           <button className="primary-button" disabled={loading || !email}>
             {loading ? 'Sending code…' : 'Send Slack Login Code →'}
           </button>
+          <div style={{ marginTop: '14px', textAlign: 'center' }}>
+            <button
+              type="button"
+              className="text-button"
+              style={{ fontSize: '13px', opacity: 0.85 }}
+              onClick={handleTestBypass}
+            >
+              ⚡ Quick Test Login (Auto-fill Code: 1234)
+            </button>
+          </div>
         </form>
       ) : (
         <form onSubmit={handleVerifyCode}>

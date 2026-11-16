@@ -4,8 +4,8 @@
 
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
-import expenseCommandHandler from '../api/slack/commands/expense.js'
-import interactionsHandler from '../api/slack/interactions.js'
+import expenseCommandHandler from '../lib/expenses/slack-command.js'
+import interactionsHandler from '../lib/expenses/slack-interactions.js'
 import expensesHandler from '../api/expenses.js'
 import { createExpenseSessionToken } from '../lib/expenses/session.js'
 
