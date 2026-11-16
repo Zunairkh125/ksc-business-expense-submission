@@ -150,17 +150,19 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('expense-receipts', 'expense-receipts', true)
 ON CONFLICT (id) DO NOTHING;
 
+-- Public read access to receipts in expense-receipts bucket
 DROP POLICY IF EXISTS "Public access to expense-receipts" ON storage.objects;
 CREATE POLICY "Public access to expense-receipts"
   ON storage.objects
   FOR SELECT
-  TO anon, authenticated
+  TO public
   USING (bucket_id = 'expense-receipts');
 
+-- Upload access for service_role and authenticated users (INSERT must strictly use WITH CHECK, no USING)
 DROP POLICY IF EXISTS "Service role upload to expense-receipts" ON storage.objects;
-CREATE POLICY "Service role upload to expense-receipts"
+DROP POLICY IF EXISTS "Allow upload to expense-receipts" ON storage.objects;
+CREATE POLICY "Allow upload to expense-receipts"
   ON storage.objects
-  FOR ALL
-  TO service_role
-  USING (bucket_id = 'expense-receipts')
+  FOR INSERT
+  TO service_role, authenticated
   WITH CHECK (bucket_id = 'expense-receipts');
