@@ -1,0 +1,2 @@
+submission_number,entry_type,pay_period_start,pay_period_end,worker_name,employee_name,agency,department,supervisor,regular_hours,overtime_hours,double_time_hours,status,submitted_by,approved_by,approved_at,notes
+SLACK-EXAMPLE-001,Temp Timecard,2026-09-18,2026-09-20,Brad Mac Neille,,Employnet,Inventory,Chris Green,8,0,0,Processed,Historical Slack Import,Blakeli,2026-09-18,Imported from old Slack Temp Agency Timecard Form

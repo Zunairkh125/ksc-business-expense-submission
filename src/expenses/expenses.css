@@ -1,0 +1,241 @@
+/* ============================================================================
+   Kawaii Slime Company - Business Expense & Receipt Submission
+   Matching Hub Branding, CSS Tokens & Standard Table Styling
+   ============================================================================ */
+
+.expense-module {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: 100%;
+}
+
+.expense-module .content-header h1 {
+  font-size: clamp(24px, 3.5vw, 36px);
+  margin: 6px 0 3px;
+  color: var(--brown);
+  font-weight: 800;
+}
+
+.expense-module .content-header p {
+  color: var(--brown-soft);
+  font-size: 12px;
+  margin: 0;
+}
+
+/* Category Pill */
+.category-pill {
+  display: inline-block;
+  padding: 4px 9px;
+  background: var(--pink-soft, #ffe6f0);
+  border: 1px solid #f2d2dc;
+  border-radius: 99px;
+  font-size: 9px;
+  font-weight: 800;
+  color: var(--brown);
+  white-space: nowrap;
+}
+
+/* Reimbursement Pill */
+.reimbursement-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 99px;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.reimbursement-pill.yes {
+  background: #ffe6f0;
+  color: #9d4661;
+  border: 1px solid #f0cbd7;
+}
+
+.reimbursement-pill.no {
+  background: #c7eaf8;
+  color: #2e6980;
+  border: 1px solid #b3dfee;
+}
+
+/* Table Specific Cell Tweaks */
+.expense-module .data-table td {
+  vertical-align: middle;
+}
+
+.expense-module .amount-cell {
+  font-family: Nunito, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--brown);
+  white-space: nowrap;
+}
+
+.expense-module .purpose-cell {
+  max-width: 280px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.expense-module .notes-cell {
+  max-width: 220px;
+  line-height: 1.4;
+  color: var(--brown-soft);
+  word-break: break-word;
+}
+
+/* Receipt Actions */
+.receipt-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.receipt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--brown);
+  font-family: Nunito, system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.16s ease;
+}
+
+.receipt-btn:hover {
+  background: var(--pink-soft);
+  border-color: var(--pink);
+  transform: translateY(-1px);
+}
+
+.receipt-btn.preview {
+  background: var(--pink-soft);
+  border-color: #f0cbd7;
+  color: var(--brown);
+}
+
+.receipt-btn.download {
+  background: #fff;
+}
+
+/* Receipt Preview Lightbox Modal */
+.receipt-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(138, 93, 59, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.receipt-modal {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(138, 93, 59, 0.25);
+  width: min(680px, 100%);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: receiptModalIn 0.18s ease-out;
+}
+
+@keyframes receiptModalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.receipt-modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--pink-soft);
+}
+
+.receipt-modal-header strong {
+  display: block;
+  font-size: 13px;
+  color: var(--brown);
+}
+
+.receipt-modal-header span {
+  display: block;
+  font-size: 11px;
+  color: var(--brown-soft);
+  margin-top: 2px;
+}
+
+.close-modal-btn {
+  border: 0;
+  background: transparent;
+  color: var(--brown);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.close-modal-btn:hover {
+  background: rgba(138, 93, 59, 0.1);
+}
+
+.receipt-modal-body {
+  padding: 20px;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 250px;
+  max-height: 60vh;
+  background: #faf8f7;
+}
+
+.receipt-preview-img {
+  max-width: 100%;
+  max-height: 55vh;
+  object-fit: contain;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(138, 93, 59, 0.12);
+}
+
+.receipt-preview-frame {
+  width: 100%;
+  height: 55vh;
+  border: 0;
+  border-radius: 10px;
+}
+
+.receipt-fallback {
+  color: var(--brown-soft);
+  font-size: 12px;
+  text-align: center;
+}
+
+.receipt-modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  background: #fff;
+}

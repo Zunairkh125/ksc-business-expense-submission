@@ -1,0 +1,51 @@
+{
+  "display_information": {
+    "name": "KSC Business Expenses",
+    "description": "Submit business expense receipts and reimbursement requests",
+    "background_color": "#8a5d3b"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Business Expenses",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/expense",
+        "url": "https://YOUR-VERCEL-DOMAIN.vercel.app/api/slack/commands/expense",
+        "description": "Submit a business expense receipt",
+        "should_escape": false
+      }
+    ],
+    "shortcuts": [
+      {
+        "name": "Business Expense",
+        "type": "global",
+        "callback_id": "open_expense_form",
+        "description": "Submit a business purchase receipt"
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "commands",
+        "chat:write",
+        "im:write",
+        "files:read",
+        "files:write",
+        "users:read",
+        "users:read.email"
+      ]
+    }
+  },
+  "settings": {
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://YOUR-VERCEL-DOMAIN.vercel.app/api/slack/interactions"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

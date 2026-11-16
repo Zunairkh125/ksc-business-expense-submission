@@ -1,0 +1,18 @@
+{
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    { "source": "/onboard", "destination": "/index.html" },
+    { "source": "/expenses", "destination": "/index.html" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/birthday",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}
