@@ -1,5 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './expenses.css'
+
+export const EXPENSE_CATEGORIES = [
+  'Office Supplies',
+  'Inventory / Production Supplies',
+  'Shipping & Postage',
+  'Marketing',
+  'Travel',
+  'Meals',
+  'Software / Subscriptions',
+  'Equipment',
+  'Retail Store Supplies',
+  'Maintenance',
+  'Other',
+]
+
+export const REIMBURSEMENT_OPTIONS = [
+  'Yes – I paid personally and need reimbursement',
+  'No – Company card or company account was used',
+]
 
 function formatCurrency(amount) {
   const num = Number(amount || 0)
@@ -77,7 +96,28 @@ export default function ExpenseApp({ user, token: propToken }) {
   const [error, setError] = useState('')
   const [previewReceipt, setPreviewReceipt] = useState(null)
 
+  // Web Form Submit State
+  const [employeeName, setEmployeeName] = useState(user?.name || user?.username || 'Employee')
+  const [purchaseDate, setPurchaseDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const [amount, setAmount] = useState('')
+  const [businessPurpose, setBusinessPurpose] = useState('')
+  const [category, setCategory] = useState(EXPENSE_CATEGORIES[0])
+  const [requiresReimbursement, setRequiresReimbursement] = useState(REIMBURSEMENT_OPTIONS[0])
+  const [additionalNotes, setAdditionalNotes] = useState('')
+  const [receiptFile, setReceiptFile] = useState(null)
+  const [receiptFileName, setReceiptFileName] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const [submitSuccess, setSubmitSuccess] = useState('')
+  const fileInputRef = useRef(null)
+
   const token = propToken || user?.expense_token || ''
+
+  useEffect(() => {
+    if (user?.name) {
+      setEmployeeName(user.name)
+    }
+  }, [user])
 
   async function loadExpenses() {
     setLoading(true)
@@ -95,7 +135,6 @@ export default function ExpenseApp({ user, token: propToken }) {
       setExpenses(data.expenses && data.expenses.length > 0 ? data.expenses : DEFAULT_PREVIEW_EXPENSES)
     } catch (err) {
       console.error('[ExpenseApp] Failed to load expenses:', err)
-      // Keep showing preview expenses if fetch fails or Supabase is not connected
       setExpenses((prev) => (prev.length > 0 ? prev : DEFAULT_PREVIEW_EXPENSES))
     } finally {
       setLoading(false)
@@ -106,209 +145,431 @@ export default function ExpenseApp({ user, token: propToken }) {
     loadExpenses()
   }, [token])
 
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) {
+      setReceiptFile(null)
+      setReceiptFileName('')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setSubmitError('File is too large (maximum 5MB). Please upload a smaller image or PDF.')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const base64Data = String(reader.result).split(',')[1]
+      setReceiptFile({
+        name: file.name,
+        type: file.type,
+        data: base64Data,
+        previewUrl: file.type.startsWith('image/') ? reader.result : null,
+      })
+      setReceiptFileName(file.name)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  async function handleSubmitExpense(e) {
+    e.preventDefault()
+    setSubmitting(true)
+    setSubmitError('')
+    setSubmitSuccess('')
+
+    try {
+      if (!receiptFile || !receiptFile.data) {
+        throw new Error('Please upload a receipt file (Image or PDF).')
+      }
+
+      const payload = {
+        employee_name: employeeName,
+        employee_email: user?.email || '',
+        purchase_date: purchaseDate,
+        amount,
+        business_purpose: businessPurpose,
+        category,
+        requires_reimbursement: requiresReimbursement.startsWith('Yes'),
+        receipt_file: receiptFile,
+        additional_notes: additionalNotes,
+      }
+
+      const headers = { 'Content-Type': 'application/json' }
+      if (token) headers.Authorization = `Bearer ${token}`
+
+      const res = await fetch('/api/expenses?route=submit', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to submit business expense.')
+      }
+
+      setSubmitSuccess('Business expense and receipt submitted successfully!')
+      // Reset form fields
+      setAmount('')
+      setBusinessPurpose('')
+      setAdditionalNotes('')
+      setReceiptFile(null)
+      setReceiptFileName('')
+      if (fileInputRef.current) fileInputRef.current.value = ''
+
+      // Prepend to expenses list immediately
+      if (data.submission) {
+        setExpenses((prev) => [data.submission, ...prev.filter((x) => x.id !== data.submission.id)])
+      }
+    } catch (err) {
+      setSubmitError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className="expense-module">
-      {/* Content Header matching Hub standard */}
-      <div className="content-header">
-        <div>
-          <span className="eyebrow">Finance Operations</span>
-          <h1>Business Expense &amp; Receipt Submission</h1>
-          <p>
-            Submissions synced from Slack and Supabase.
-          </p>
+      {/* 1. Submit Expense Form Panel */}
+      <section className="panel expense-submit-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Business Expense &amp; Receipt Submission</h2>
+            <p>
+              Use this form for all business purchases—whether you used a personal payment method (and need reimbursement) or a company credit card.
+            </p>
+          </div>
         </div>
-        <div className="header-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={loadExpenses}
-            disabled={loading}
-          >
-            {loading ? 'Refreshing…' : '↻ Refresh'}
-          </button>
-        </div>
-      </div>
 
-      {/* Error notification if request fails */}
+        {submitError && <div className="form-error">⚠️ {submitError}</div>}
+        {submitSuccess && <div className="form-success">✅ {submitSuccess}</div>}
+
+        <form className="expense-form" onSubmit={handleSubmitExpense}>
+          <div className="form-grid two">
+            {/* 1. Employee */}
+            <label className="field">
+              <span>Employee</span>
+              <input
+                type="text"
+                value={employeeName}
+                onChange={(e) => setEmployeeName(e.target.value)}
+                placeholder="Employee Name"
+                required
+              />
+            </label>
+
+            {/* 2. Date of Purchase */}
+            <label className="field">
+              <span>Date of Purchase</span>
+              <input
+                type="date"
+                value={purchaseDate}
+                onChange={(e) => setPurchaseDate(e.target.value)}
+                required
+              />
+            </label>
+          </div>
+
+          <div className="form-grid two">
+            {/* 3. Amount */}
+            <label className="field">
+              <span>Amount</span>
+              <input
+                type="text"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="$XX.XX"
+                required
+              />
+            </label>
+
+            {/* 5. Expense Category */}
+            <label className="field">
+              <span>Expense Category</span>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                required
+              >
+                {EXPENSE_CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {/* 4. Business Purpose */}
+          <label className="field">
+            <span>Business Purpose</span>
+            <textarea
+              rows={3}
+              value={businessPurpose}
+              onChange={(e) => setBusinessPurpose(e.target.value)}
+              placeholder="Briefly describe what was purchased and why. Example: Purchased display hooks for Learning Express setup."
+              required
+            />
+          </label>
+
+          <div className="form-grid two">
+            {/* 6. Upload Receipt */}
+            <label className="field">
+              <span>Upload Receipt</span>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*,.pdf"
+                onChange={handleFileChange}
+                required
+              />
+              {receiptFileName && (
+                <small style={{ color: 'var(--brown)', fontWeight: 800, marginTop: 4 }}>
+                  Attached: {receiptFileName}
+                </small>
+              )}
+            </label>
+
+            {/* 7. Does this purchase require reimbursement? */}
+            <label className="field">
+              <span>Does this purchase require reimbursement?</span>
+              <select
+                value={requiresReimbursement}
+                onChange={(e) => setRequiresReimbursement(e.target.value)}
+                required
+              >
+                {REIMBURSEMENT_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {/* 8. Additional Notes */}
+          <label className="field">
+            <span>Additional Notes (Optional)</span>
+            <input
+              type="text"
+              value={additionalNotes}
+              onChange={(e) => setAdditionalNotes(e.target.value)}
+              placeholder="Any additional notes or details"
+            />
+          </label>
+
+          {/* 9. Submit Button */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+            <button type="submit" className="primary-button" disabled={submitting}>
+              {submitting ? 'Submitting Expense…' : 'Submit'}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {/* Error notification if GET request fails */}
       {error && (
         <div className="form-error">
           <span>⚠️ {error}</span>
         </div>
       )}
 
-      {/* Submissions Table */}
-      {loading && expenses.length === 0 ? (
-        <div className="loading-state">Loading expense submissions…</div>
-      ) : expenses.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">♡</div>
-          <h2>No expense submissions yet</h2>
-          <p>
-            Submissions sent via Slack with the <code>/expense</code> command will sync and appear here automatically.
-          </p>
+      {/* 2. Submitted Expenses Table Panel */}
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Submitted Expenses</h2>
+            <p>Submissions synced from Slack and Supabase.</p>
+          </div>
+          <div className="header-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={loadExpenses}
+              disabled={loading}
+            >
+              {loading ? 'Refreshing…' : '↻ Refresh'}
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th>Date of Purchase</th>
-                <th>Amount</th>
-                <th>Business Purpose</th>
-                <th>Expense Category</th>
-                <th>Requires Reimbursement</th>
-                <th>Additional Notes</th>
-                <th>Receipt</th>
-              </tr>
-            </thead>
-            <tbody>
-              {expenses.map((item) => {
-                const receiptUrl = item.receipt_slack_url || `/api/expenses?route=receipt&id=${item.id}`
-                const isReimbursedYes = Boolean(item.requires_reimbursement)
 
-                return (
-                  <tr key={item.id}>
-                    {/* 1. Employee */}
-                    <td className="strong-cell">
-                      {item.employee_name || 'Employee'}
-                      {item.employee_email && <small>{item.employee_email}</small>}
-                      {!item.employee_email && item.slack_user_id && (
-                        <small>Slack: {item.slack_user_id}</small>
-                      )}
-                    </td>
+        {loading && expenses.length === 0 ? (
+          <div className="loading-state">Loading expense submissions…</div>
+        ) : expenses.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">♡</div>
+            <h2>No expense submissions yet</h2>
+            <p>
+              Submissions sent via Slack with the <code>/expense</code> command will sync and appear here automatically.
+            </p>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Date of Purchase</th>
+                  <th>Amount</th>
+                  <th>Business Purpose</th>
+                  <th>Expense Category</th>
+                  <th>Requires Reimbursement</th>
+                  <th>Additional Notes</th>
+                  <th>Receipt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expenses.map((item) => {
+                  const receiptUrl = item.receipt_slack_url || `/api/expenses?route=receipt&id=${item.id}`
+                  const isReimbursedYes = Boolean(item.requires_reimbursement)
 
-                    {/* 2. Date of Purchase */}
-                    <td>{formatDate(item.purchase_date)}</td>
+                  return (
+                    <tr key={item.id}>
+                      {/* 1. Employee */}
+                      <td className="strong-cell">
+                        {item.employee_name || 'Employee'}
+                        {item.employee_email && <small>{item.employee_email}</small>}
+                        {!item.employee_email && item.slack_user_id && (
+                          <small>Slack: {item.slack_user_id}</small>
+                        )}
+                      </td>
 
-                    {/* 3. Amount */}
-                    <td className="strong-cell amount-cell">
-                      {formatCurrency(item.amount)}
-                    </td>
+                      {/* 2. Date of Purchase */}
+                      <td>{formatDate(item.purchase_date)}</td>
 
-                    {/* 4. Business Purpose */}
-                    <td className="purpose-cell">
-                      {item.business_purpose || '—'}
-                    </td>
+                      {/* 3. Amount */}
+                      <td className="strong-cell amount-cell">
+                        {formatCurrency(item.amount)}
+                      </td>
 
-                    {/* 5. Expense Category */}
-                    <td>
-                      <span className="category-pill">{item.category || 'Other'}</span>
-                    </td>
+                      {/* 4. Business Purpose */}
+                      <td className="purpose-cell">
+                        {item.business_purpose || '—'}
+                      </td>
 
-                    {/* 6. Requires Reimbursement (Yes / No) */}
-                    <td>
-                      <span className={`reimbursement-pill ${isReimbursedYes ? 'yes' : 'no'}`}>
-                        {isReimbursedYes ? 'Yes' : 'No'}
-                      </span>
-                    </td>
+                      {/* 5. Expense Category */}
+                      <td>
+                        <span className="category-pill">{item.category || 'Other'}</span>
+                      </td>
 
-                    {/* 7. Additional Notes */}
-                    <td className="notes-cell">
-                      {item.additional_notes || '—'}
-                    </td>
+                      {/* 6. Requires Reimbursement (Yes / No) */}
+                      <td>
+                        <span className={`reimbursement-pill ${isReimbursedYes ? 'yes' : 'no'}`}>
+                          {isReimbursedYes ? 'Yes' : 'No'}
+                        </span>
+                      </td>
 
-                    {/* 8. Receipt Link / Preview */}
-                    <td className="receipt-cell">
-                      {receiptUrl ? (
-                        <div className="receipt-action-group">
-                          <button
-                            type="button"
-                            className="receipt-btn preview"
-                            onClick={() =>
-                              setPreviewReceipt({
-                                url: receiptUrl,
-                                filename: item.receipt_filename || 'Receipt',
-                                employee: item.employee_name,
-                                amount: formatCurrency(item.amount),
-                              })
-                            }
-                            title="Preview receipt"
-                          >
-                            👁 View
-                          </button>
-                          <a
-                            href={receiptUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="receipt-btn download"
-                            download={item.receipt_filename || 'receipt'}
-                            title="Open or download file"
-                          >
-                            ⬇
-                          </a>
-                        </div>
-                      ) : (
-                        <span className="muted-text">—</span>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                      {/* 7. Additional Notes */}
+                      <td className="notes-cell">
+                        {item.additional_notes || '—'}
+                      </td>
 
-      {/* Clean Receipt Preview Modal */}
+                      {/* 8. Receipt Link / Preview */}
+                      <td className="receipt-cell">
+                        {receiptUrl ? (
+                          <div className="receipt-action-group">
+                            <button
+                              type="button"
+                              className="receipt-btn preview"
+                              onClick={() =>
+                                setPreviewReceipt({
+                                  url: receiptUrl,
+                                  filename: item.receipt_filename || 'Receipt',
+                                  employee: item.employee_name,
+                                  amount: formatCurrency(item.amount),
+                                })
+                              }
+                            >
+                              View Receipt
+                            </button>
+                            <a
+                              href={receiptUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="receipt-btn download"
+                              download={item.receipt_filename || 'receipt'}
+                            >
+                              Download
+                            </a>
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--brown-soft)', fontSize: '10px' }}>No receipt</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Receipt Preview Lightbox Modal */}
       {previewReceipt && (
         <div className="receipt-modal-backdrop" onClick={() => setPreviewReceipt(null)}>
           <div className="receipt-modal" onClick={(e) => e.stopPropagation()}>
             <div className="receipt-modal-header">
               <div>
-                <strong>{previewReceipt.filename}</strong>
+                <strong>Receipt Preview</strong>
                 <span>
-                  {previewReceipt.employee} · {previewReceipt.amount}
+                  {previewReceipt.employee} · {previewReceipt.amount} ({previewReceipt.filename})
                 </span>
               </div>
               <button
                 type="button"
                 className="close-modal-btn"
                 onClick={() => setPreviewReceipt(null)}
+                title="Close"
               >
                 ✕
               </button>
             </div>
             <div className="receipt-modal-body">
-              {/\.(png|jpe?g|gif|webp|svg)($|\?)/i.test(previewReceipt.url) ||
-              !/\.pdf($|\?)/i.test(previewReceipt.url) ? (
-                <img
-                  src={previewReceipt.url}
-                  alt={previewReceipt.filename}
-                  className="receipt-preview-img"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none'
-                    const fallback = e.currentTarget.nextElementSibling
-                    if (fallback) fallback.style.display = 'block'
-                  }}
-                />
-              ) : null}
-              <div className="receipt-fallback" style={{ display: 'none' }}>
-                <p>Unable to render inline image preview.</p>
-              </div>
-              {/\.pdf($|\?)/i.test(previewReceipt.url) && (
+              {previewReceipt.url.endsWith('.pdf') ? (
                 <iframe
                   src={previewReceipt.url}
                   title="Receipt PDF Preview"
                   className="receipt-preview-frame"
                 />
+              ) : (
+                <img
+                  src={previewReceipt.url}
+                  alt="Receipt Preview"
+                  className="receipt-preview-img"
+                  onError={(e) => {
+                    e.target.style.display = 'none'
+                    e.target.nextSibling.style.display = 'block'
+                  }}
+                />
               )}
+              <div className="receipt-fallback" style={{ display: 'none' }}>
+                <p>Preview could not be rendered directly in this browser.</p>
+                <a
+                  href={previewReceipt.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="secondary-button"
+                  style={{ display: 'inline-block', marginTop: 10 }}
+                >
+                  Open in New Tab ↗
+                </a>
+              </div>
             </div>
             <div className="receipt-modal-footer">
               <a
                 href={previewReceipt.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="primary-button"
+                className="secondary-button"
               >
-                Open in New Tab / Download
+                Open External ↗
               </a>
               <button
                 type="button"
-                className="secondary-button"
+                className="primary-button"
                 onClick={() => setPreviewReceipt(null)}
               >
-                Close
+                Close Preview
               </button>
             </div>
           </div>

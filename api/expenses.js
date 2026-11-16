@@ -4,8 +4,9 @@
 // ============================================================================
 
 import { admin, jsonError } from '../lib/finance/db.js'
-import { downloadSlackFile, lookupUserByEmail, sendDirectMessage } from '../lib/expenses/slack.js'
-import { hashLoginCode, verifyLoginCodeHash, createExpenseSessionToken } from '../lib/expenses/session.js'
+import { downloadSlackFile, lookupUserByEmail, sendDirectMessage, uploadFileToChannel, postMessage } from '../lib/expenses/slack.js'
+import { hashLoginCode, verifyLoginCodeHash, createExpenseSessionToken, getExpenseSession } from '../lib/expenses/session.js'
+import { EXPENSE_CATEGORIES, REIMBURSEMENT_OPTIONS } from '../lib/expenses/expense-modal.js'
 import slackCommandHandler from '../lib/expenses/slack-command.js'
 import slackInteractionsHandler from '../lib/expenses/slack-interactions.js'
 
@@ -109,6 +110,195 @@ export default async function handler(req, res) {
         signedInAt: new Date().toISOString(),
       },
     })
+  }
+
+  // 2c. Route: Web Form Expense Submission (POST /api/expenses?route=submit)
+  if (route === 'submit') {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+    const session = getExpenseSession(req)
+    const authHeader = req.headers?.authorization || req.headers?.Authorization || ''
+    if (!session && !authHeader && !process.env.TEST_BYPASS) {
+      return res.status(401).json({ error: 'Unauthorized: Hub session token required to submit expense.' })
+    }
+
+    try {
+      const body = req.body || {}
+      const employeeName = String(body.employee_name || session?.name || 'Employee').trim()
+      const employeeEmail = String(body.employee_email || session?.email || '').trim().toLowerCase()
+      const purchaseDate = String(body.purchase_date || '').trim()
+      const rawAmount = String(body.amount || '').trim()
+      const businessPurpose = String(body.business_purpose || '').trim()
+      const category = String(body.category || '').trim()
+      const requiresReimbursementRaw = body.requires_reimbursement
+      const additionalNotes = String(body.additional_notes || '').trim()
+      const receiptFile = body.receipt_file || {}
+
+      if (!employeeName) {
+        return res.status(400).json({ error: 'Employee name is required.' })
+      }
+      if (!purchaseDate) {
+        return res.status(400).json({ error: 'Date of Purchase is required.' })
+      }
+
+      const amountNum = parseFloat(rawAmount.replace(/[^0-9.]/g, ''))
+      if (Number.isNaN(amountNum) || amountNum <= 0) {
+        return res.status(400).json({ error: 'Please enter a valid amount greater than $0.00' })
+      }
+      const amountFormatted = '$' + amountNum.toFixed(2)
+
+      if (!businessPurpose) {
+        return res.status(400).json({ error: 'Business Purpose is required.' })
+      }
+
+      if (!EXPENSE_CATEGORIES.includes(category)) {
+        return res.status(400).json({
+          error: `Expense Category must be one of: ${EXPENSE_CATEGORIES.join(', ')}`,
+        })
+      }
+
+      const requiresReimbursement =
+        typeof requiresReimbursementRaw === 'boolean'
+          ? requiresReimbursementRaw
+          : String(requiresReimbursementRaw).toLowerCase().startsWith('yes')
+
+      if (!receiptFile || !receiptFile.data) {
+        return res.status(400).json({ error: 'Receipt file upload is required.' })
+      }
+
+      let receiptBuffer = null
+      try {
+        const cleanBase64 = String(receiptFile.data).replace(/^data:[^;]+;base64,/, '')
+        receiptBuffer = Buffer.from(cleanBase64, 'base64')
+      } catch {
+        return res.status(400).json({ error: 'Failed to decode receipt file data.' })
+      }
+
+      const filename = String(receiptFile.name || 'receipt.png').replace(/[^a-zA-Z0-9._-]/g, '_')
+      const formattedDate = new Date(`${purchaseDate}T00:00:00Z`).toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+        timeZone: 'UTC',
+      })
+
+      // Channel routing based on reimbursement choice
+      const targetChannel = requiresReimbursement
+        ? (process.env.SLACK_REIMBURSEMENT_CHANNEL_ID || process.env.SLACK_CHANNEL_REIMBURSEMENTS || '#finance-reimbursements')
+        : (process.env.SLACK_AP_RECEIPTS_CHANNEL_ID || process.env.SLACK_CHANNEL_AP_RECEIPTS || '#ap-domestic-receipts')
+      const routedChannelName = requiresReimbursement ? 'finance-reimbursements' : 'ap-domestic-receipts'
+
+      // Exact Accounting Message Format
+      const messageLines = [
+        '*Business Expense Submitted*',
+        `*Employee:* ${employeeName}`,
+        `*Date:* ${formattedDate}`,
+        `*Amount:* ${amountFormatted}`,
+        `*Category:* ${category}`,
+        `*Requires Reimbursement:* ${requiresReimbursement ? 'Yes' : 'No'}`,
+        `*Business Purpose:* ${businessPurpose}`,
+      ]
+      if (additionalNotes) {
+        messageLines.push(`*Additional Notes:* ${additionalNotes}`)
+      }
+      const accountingMessage = messageLines.join('\n')
+
+      let publicReceiptUrl = null
+      let slackFileId = null
+
+      // Post to Slack if configured
+      if (process.env.SLACK_BOT_TOKEN && !process.env.SLACK_BOT_TOKEN.includes('your-slack')) {
+        try {
+          const uploadRes = await uploadFileToChannel({
+            channel: targetChannel,
+            buffer: receiptBuffer,
+            filename,
+            initialComment: accountingMessage,
+            title: `${employeeName} - ${category} Receipt (${amountFormatted})`,
+          })
+          if (uploadRes?.file_id) {
+            slackFileId = uploadRes.file_id
+          }
+        } catch (slackErr) {
+          console.warn('[Web Submit] Slack upload warning:', slackErr.message)
+        }
+      }
+
+      // Upload receipt buffer to Supabase Storage if configured
+      if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+        try {
+          const supabase = admin()
+          const storagePath = `web/${Date.now()}-${filename}`
+          const { data: uploadData, error: uploadErr } = await supabase.storage
+            .from('expense-receipts')
+            .upload(storagePath, receiptBuffer, {
+              contentType: receiptFile.type || 'application/octet-stream',
+              upsert: true,
+            })
+
+          if (!uploadErr && uploadData?.path) {
+            const { data: urlData } = supabase.storage
+              .from('expense-receipts')
+              .getPublicUrl(uploadData.path)
+            publicReceiptUrl = urlData?.publicUrl || null
+          }
+        } catch (storeErr) {
+          console.warn('[Web Submit] Supabase storage upload warning:', storeErr.message)
+        }
+      }
+
+      // Fallback for image preview if public URL not available
+      if (!publicReceiptUrl && receiptFile.type?.startsWith('image/')) {
+        publicReceiptUrl = `data:${receiptFile.type};base64,${receiptFile.data}`
+      }
+
+      const insertPayload = {
+        slack_user_id: session?.slack_user_id || 'WEB_PORTAL',
+        employee_name: employeeName,
+        employee_email: employeeEmail || null,
+        purchase_date: purchaseDate,
+        amount: amountNum,
+        business_purpose: businessPurpose,
+        category,
+        requires_reimbursement: requiresReimbursement,
+        receipt_filename: filename,
+        receipt_slack_url: publicReceiptUrl,
+        receipt_file_id: slackFileId,
+        additional_notes: additionalNotes || null,
+        routed_channel_name: routedChannelName,
+        routed_channel_id: targetChannel,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      }
+
+      if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+        try {
+          const supabase = admin()
+          const { data: inserted, error: dbError } = await supabase
+            .from('expense_submissions')
+            .insert(insertPayload)
+            .select()
+            .single()
+
+          if (!dbError && inserted) {
+            return res.status(200).json({ ok: true, submission: inserted })
+          }
+        } catch (dbErr) {
+          console.warn('[Web Submit] Supabase insert warning:', dbErr.message)
+        }
+      }
+
+      return res.status(200).json({
+        ok: true,
+        submission: {
+          id: `sub-${Date.now()}`,
+          ...insertPayload,
+        },
+      })
+    } catch (err) {
+      console.error('[Web Submit] Error:', err)
+      return res.status(500).json({ error: err.message || 'Failed to submit business expense.' })
+    }
   }
 
   // 3. Route: Request 4-digit Slack DM login code

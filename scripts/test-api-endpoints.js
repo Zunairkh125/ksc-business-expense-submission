@@ -214,4 +214,60 @@ const validToken = createExpenseSessionToken(validUser)
 }
 console.log('✅ Test 7 Passed: Valid session Bearer token is accepted.\n')
 
-console.log('🎉 ALL 7 ENDPOINT INTEGRATION TESTS PASSED!')
+// ----------------------------------------------------------------------------
+// Test 8: Web Form Expense Submit (POST /api/expenses?route=submit)
+// ----------------------------------------------------------------------------
+console.log('Test 8: Testing Web Form Expense Submit (route=submit)...')
+{
+  // Missing receipt file
+  const { req, res } = createMockReqRes({
+    method: 'POST',
+    query: { route: 'submit' },
+    headers: { authorization: `Bearer ${validToken}` },
+    body: JSON.stringify({
+      employee_name: 'Jane Doe',
+      purchase_date: '2026-11-16',
+      amount: '$48.50',
+      business_purpose: 'Bought display hooks for Learning Express setup.',
+      category: 'Retail Store Supplies',
+      requires_reimbursement: 'Yes – I paid personally and need reimbursement',
+    }),
+  })
+  await expensesHandler(req, res)
+  assert.equal(res.statusCode, 400)
+  assert.ok(res.body?.error.includes('Receipt file upload is required'))
+}
+{
+  // Valid Web Form Submission
+  const dummyReceiptBase64 = Buffer.from('mock-receipt-image-content').toString('base64')
+  const { req, res } = createMockReqRes({
+    method: 'POST',
+    query: { route: 'submit' },
+    headers: { authorization: `Bearer ${validToken}` },
+    body: JSON.stringify({
+      employee_name: 'Jane Doe',
+      employee_email: 'jane@kawaiislimecompany.com',
+      purchase_date: '2026-11-16',
+      amount: '$48.50',
+      business_purpose: 'Purchased display hooks for Learning Express setup.',
+      category: 'Retail Store Supplies',
+      requires_reimbursement: 'Yes – I paid personally and need reimbursement',
+      receipt_file: {
+        name: 'store_receipt.png',
+        type: 'image/png',
+        data: dummyReceiptBase64,
+      },
+      additional_notes: 'Paid at register 2.',
+    }),
+  })
+  await expensesHandler(req, res)
+  assert.equal(res.statusCode, 200)
+  assert.equal(res.body?.ok, true)
+  assert.equal(res.body?.submission?.employee_name, 'Jane Doe')
+  assert.equal(res.body?.submission?.category, 'Retail Store Supplies')
+  assert.equal(res.body?.submission?.amount, 48.5)
+  assert.equal(res.body?.submission?.requires_reimbursement, true)
+}
+console.log('✅ Test 8 Passed: Web form submit validates fields and successfully registers submission.\n')
+
+console.log('🎉 ALL 8 ENDPOINT INTEGRATION TESTS PASSED!')

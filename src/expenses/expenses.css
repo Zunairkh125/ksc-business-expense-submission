@@ -239,3 +239,68 @@
   gap: 10px;
   background: #fff;
 }
+
+/* Success Banner */
+.form-success {
+  background: #e9f8ed;
+  color: #276749;
+  border: 1px solid #c6f6d5;
+  padding: 11px 14px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Submit Form Panel Enhancements */
+.expense-submit-panel {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 22px;
+  box-shadow: 0 10px 30px rgba(138, 93, 59, 0.05);
+  margin-bottom: 18px;
+}
+
+.expense-submit-panel .panel-heading {
+  margin-bottom: 16px;
+}
+
+.expense-submit-panel .panel-heading h2 {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--brown);
+  margin: 0;
+}
+
+.expense-submit-panel .panel-heading p {
+  font-size: 11px;
+  color: var(--brown-soft);
+  margin: 4px 0 0;
+  line-height: 1.45;
+}
+
+.expense-form .field {
+  margin-bottom: 14px;
+}
+
+.expense-form .field > span {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--brown);
+  margin-bottom: 5px;
+}
+
+.expense-form input[type="file"] {
+  padding: 8px 10px;
+  background: #faf8f7;
+  cursor: pointer;
+}
+
+.expense-form textarea {
+  min-height: 70px;
+  resize: vertical;
+}
