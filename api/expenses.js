@@ -73,6 +73,44 @@ export default async function handler(req, res) {
     return slackInteractionsHandler(req, res)
   }
 
+  // 2b. Route: Testing / Admin Email & Password login
+  if (route === 'password-login') {
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+    const email = String(req.body?.email || req.body?.username || '').trim().toLowerCase()
+    const password = String(req.body?.password || '').trim()
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' })
+    }
+
+    const validEmails = ['admin@kawaiislimecompany.com', 'test@kawaiislimecompany.com', 'admin', 'demo', 'zunair@kawaiislimecompany.com']
+    const validPasswords = ['ksc2026', 'admin123', 'kscpassword', 'kawaii2026']
+
+    const isMatch = validEmails.includes(email) && validPasswords.includes(password)
+    if (!isMatch) {
+      return res.status(401).json({
+        error: 'Invalid email or password. For testing, use admin@kawaiislimecompany.com with password ksc2026',
+      })
+    }
+
+    const user = {
+      username: email,
+      name: email.includes('admin') ? 'KSC Administrator' : 'Finance Reviewer',
+      email: email.includes('@') ? email : `${email}@kawaiislimecompany.com`,
+      role: 'Admin',
+    }
+    const token = createExpenseSessionToken(user)
+    return res.status(200).json({
+      ok: true,
+      token,
+      user: {
+        ...user,
+        expense_token: token,
+        signedInAt: new Date().toISOString(),
+      },
+    })
+  }
+
   // 3. Route: Request 4-digit Slack DM login code
   if (route === 'request-code') {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })

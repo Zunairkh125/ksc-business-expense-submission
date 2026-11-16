@@ -181,9 +181,12 @@ function Login({ onLogin, onExpenseLogin, onBirthdayLogin, onAttendanceLogin }) 
 }
 
 function ExpenseSlackLogin({ onLogin }) {
+  const [authMode, setAuthMode] = useState('slack') // 'slack' or 'password'
   const [step, setStep] = useState('email')
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
+  const [passEmail, setPassEmail] = useState('admin@kawaiislimecompany.com')
+  const [password, setPassword] = useState('ksc2026')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
@@ -240,6 +243,26 @@ function ExpenseSlackLogin({ onLogin }) {
     }
   }
 
+  async function handlePasswordLogin(e) {
+    e?.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch('/api/expenses?route=password-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: passEmail, password }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Password login failed.')
+      onLogin({ token: data.token, user: data.user })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   function handleTestBypass() {
     setEmail('test@kawaiislimecompany.com')
     setStep('code')
@@ -250,79 +273,135 @@ function ExpenseSlackLogin({ onLogin }) {
 
   return (
     <div className="expense-login-form">
-      <p>
-        Use your Slack email to sign in. A 4-digit verification code will be sent to your Slack direct messages.
-      </p>
+      {/* Mode Switcher */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+        <button
+          type="button"
+          className={authMode === 'slack' ? 'primary-button' : 'secondary-button'}
+          style={{ flex: 1, padding: '8px 10px', fontSize: '13px' }}
+          onClick={() => { setAuthMode('slack'); setError(''); setMessage('') }}
+        >
+          💬 Slack 4-Digit Code
+        </button>
+        <button
+          type="button"
+          className={authMode === 'password' ? 'primary-button' : 'secondary-button'}
+          style={{ flex: 1, padding: '8px 10px', fontSize: '13px' }}
+          onClick={() => { setAuthMode('password'); setError(''); setMessage('') }}
+        >
+          🔑 Email &amp; Password
+        </button>
+      </div>
 
       {error && <div className="form-error">{error}</div>}
       {message && <div className="inline-message">{message}</div>}
 
-      {step === 'email' ? (
-        <form onSubmit={handleRequestCode}>
+      {authMode === 'password' ? (
+        <form onSubmit={handlePasswordLogin}>
+          <p style={{ fontSize: '13px', margin: '0 0 12px 0', color: 'var(--muted, #666)' }}>
+            Enter your KSC testing credentials to sign in directly.
+          </p>
           <label>
-            Slack Email
+            Email Address
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. yourname@kawaiislimecompany.com"
-              autoComplete="email"
-              autoFocus
+              type="text"
+              value={passEmail}
+              onChange={(e) => setPassEmail(e.target.value)}
+              placeholder="admin@kawaiislimecompany.com"
               required
             />
           </label>
-          <button className="primary-button" disabled={loading || !email}>
-            {loading ? 'Sending code…' : 'Send Slack Login Code →'}
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter password"
+              required
+            />
+          </label>
+          <button className="primary-button" disabled={loading || !passEmail || !password}>
+            {loading ? 'Signing in…' : 'Sign In with Password →'}
           </button>
-          <div style={{ marginTop: '14px', textAlign: 'center' }}>
-            <button
-              type="button"
-              className="text-button"
-              style={{ fontSize: '13px', opacity: 0.85 }}
-              onClick={handleTestBypass}
-            >
-              ⚡ Quick Test Login (Auto-fill Code: 1234)
-            </button>
+          <div style={{ marginTop: '12px', fontSize: '12px', color: '#777', background: 'rgba(0,0,0,0.03)', padding: '8px 10px', borderRadius: '6px', textAlign: 'center' }}>
+            <span>Testing Credentials: <code>admin@kawaiislimecompany.com</code> / <code>ksc2026</code></span>
           </div>
         </form>
       ) : (
-        <form onSubmit={handleVerifyCode}>
-          <label>
-            4-Digit Verification Code
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={4}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
-              placeholder="0000"
-              style={{ textAlign: 'center', fontSize: '22px', letterSpacing: '6px', fontWeight: 900 }}
-              autoFocus
-              required
-            />
-          </label>
-          <button className="primary-button" disabled={loading || code.length !== 4}>
-            {loading ? 'Verifying…' : 'Verify & Sign In →'}
-          </button>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14 }}>
-            <button
-              type="button"
-              className="text-button"
-              disabled={loading || cooldown > 0}
-              onClick={handleRequestCode}
-            >
-              {cooldown > 0 ? `Resend code (${cooldown}s)` : 'Resend code'}
-            </button>
-            <button
-              type="button"
-              className="text-button"
-              disabled={loading}
-              onClick={() => { setStep('email'); setError(''); setMessage('') }}
-            >
-              Change email
-            </button>
-          </div>
-        </form>
+        <>
+          <p>
+            Use your Slack email to sign in. A 4-digit verification code will be sent to your Slack direct messages.
+          </p>
+
+          {step === 'email' ? (
+            <form onSubmit={handleRequestCode}>
+              <label>
+                Slack Email
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="e.g. yourname@kawaiislimecompany.com"
+                  autoComplete="email"
+                  autoFocus
+                  required
+                />
+              </label>
+              <button className="primary-button" disabled={loading || !email}>
+                {loading ? 'Sending code…' : 'Send Slack Login Code →'}
+              </button>
+              <div style={{ marginTop: '14px', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  className="text-button"
+                  style={{ fontSize: '13px', opacity: 0.85 }}
+                  onClick={handleTestBypass}
+                >
+                  ⚡ Quick Test Login (Auto-fill Code: 1234)
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleVerifyCode}>
+              <label>
+                4-Digit Verification Code
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  placeholder="0000"
+                  style={{ textAlign: 'center', fontSize: '22px', letterSpacing: '6px', fontWeight: 900 }}
+                  autoFocus
+                  required
+                />
+              </label>
+              <button className="primary-button" disabled={loading || code.length !== 4}>
+                {loading ? 'Verifying…' : 'Verify & Sign In →'}
+              </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14 }}>
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={loading || cooldown > 0}
+                  onClick={handleRequestCode}
+                >
+                  {cooldown > 0 ? `Resend code (${cooldown}s)` : 'Resend code'}
+                </button>
+                <button
+                  type="button"
+                  className="text-button"
+                  disabled={loading}
+                  onClick={() => { setStep('email'); setError(''); setMessage('') }}
+                >
+                  Change email
+                </button>
+              </div>
+            </form>
+          )}
+        </>
       )}
     </div>
   )
